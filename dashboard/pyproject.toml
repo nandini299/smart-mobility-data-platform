@@ -1,0 +1,7 @@
+[tool.ruff]
+exclude = [
+    ".venv",
+    ".venv311",
+    "**/.venv",
+    "**/.venv311",
+]

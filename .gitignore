@@ -1,0 +1,87 @@
+```gitignore
+# Secrets (NEVER commit)
+.env
+*.env
+.aws/
+credentials
+*.pem
+*.key
+terraform.tfvars
+profiles.yml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Data (downloaded by the pipeline, never committed)
+data/
+*.parquet
+*.csv
+!dbt_mobility/seeds/*.csv
+
+# Spark / Airflow runtime
+checkpoints/
+spark-warehouse/
+metastore_db/
+derby.log
+logs/
+airflow/logs/
+airflow/plugins/
+airflow/config/
+
+# dbt build output
+dbt_mobility/target/
+dbt_mobility/dbt_packages/
+dbt_mobility/logs/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# AWS credentials and access keys
+.aws/
+*credentials*
+*accessKeys*
+access
+*.pem
+*.key
+
+# Temporary editor files
+*.swp
+*.swo
+
+# Python virtual environments
+.venv/
+.venv311/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Spark checkpoints and generated logs
+checkpoints/
+logs/
+*.log
+
+# Lint and test caches
+.ruff_cache/
+.pytest_cache/
+
+# Generated data
+data/
+```

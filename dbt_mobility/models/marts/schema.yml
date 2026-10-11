@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: fact_trips
+    description: "One row per valid taxi trip."
+    columns:
+      - name: trip_id
+        tests: [unique, not_null]
+
+      - name: date_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+
+      - name: pickup_zone_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_zone')
+                field: zone_id
+
+      - name: payment_type_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_payment_type')
+                field: payment_type_id
+
+      - name: fare_amount
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1000
+              config:
+                severity: warn
+
+  - name: dim_zone
+    columns:
+      - name: zone_id
+        tests: [unique, not_null]
+
+  - name: dim_date
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+
+  - name: dim_sensor
+    description: "Sensor dimension with SCD Type 2 history."
+    columns:
+      - name: sensor_key
+        tests: [unique, not_null]
+
+      - name: sensor_id
+        tests: [not_null]
+
+      - name: zone_id
+        tests: [not_null]
+
+      - name: is_current
+        tests: [not_null]
+
+  - name: fact_sensor_hourly
+    description: "One row per sensor per hour."
+    columns:
+      - name: sensor_id
+        tests: [not_null]
+
+      - name: reading_hour
+        tests: [not_null]
+
+      - name: reading_date
+        tests: [not_null]
+
+      - name: reading_count
+        tests: [not_null]
+
+      - name: avg_value
+        tests: [not_null]

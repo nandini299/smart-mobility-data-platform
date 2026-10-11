@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Python and dbt checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install linting and dbt tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff dbt-core dbt-athena
+
+      - name: Lint Python
+        run: ruff check .
+
+      - name: Compile Python
+        run: |
+          python -m compileall -q streaming airflow/dags dashboard
+
+      - name: Prepare dbt profile
+        working-directory: dbt_mobility
+        run: cp profiles.example.yml profiles.yml
+
+      - name: Install dbt packages
+        working-directory: dbt_mobility
+        run: dbt deps --profiles-dir .
+
+      - name: Parse dbt project
+        working-directory: dbt_mobility
+        run: dbt parse --profiles-dir .
+
+  glue-tests:
+    name: Glue 5.0 unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+
+      - name: Build Glue test image
+        run: docker build -t smart-mobility/glue:5 glue_image/
+
+      - name: Run Glue unit tests
+        run: |
+          docker run --rm \
+            -v "$PWD":/home/hadoop/workspace \
+            -w /home/hadoop/workspace \
+            smart-mobility/glue:5 \
+            python3 -m pytest -q -p no:cacheprovider tests/glue

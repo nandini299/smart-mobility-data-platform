@@ -1,0 +1,32 @@
+name: mobility
+version: "1.0.0"
+profile: mobility
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+
+models:
+  mobility:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  mobility:
+    taxi_zone_lookup:
+      +column_types:
+        location_id: int
+        borough: string
+        zone_name: string
+        service_zone: string
+
+    sensors:
+      +column_types:
+        sensor_id: string
+        sensor_type: string
+        zone_id: int
+        firmware_version: string
+        updated_at: timestamp

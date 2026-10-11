@@ -1,0 +1,8 @@
+version: 2
+sources:
+  - name: silver
+    database: awsdatacatalog
+    schema: mobility_silver
+    tables:
+      - name: trips
+      - name: sensor_readings   # created in Phase 4

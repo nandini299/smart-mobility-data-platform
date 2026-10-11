@@ -1,0 +1,82 @@
+import os
+from datetime import UTC, datetime, timedelta
+
+from airflow.operators.bash import BashOperator
+from airflow.providers.amazon.aws.operators.athena import AthenaOperator
+
+from airflow import DAG
+
+BUCKET = os.environ["S3_BUCKET"]
+
+REGION = os.environ.get("AWS_DEFAULT_REGION", "ap-south-1")
+DBT_ENV = {"DBT": "/home/airflow/dbt_venv/bin/dbt", "DBT_DIR": "/opt/airflow/dbt"}
+
+with DAG(
+    dag_id="sensors_daily",
+    start_date=datetime(2026, 10, 1, tzinfo=UTC),
+    schedule="*/59 * * * *",
+    catchup=False,
+    max_active_runs=1,
+    default_args={"owner": "nandini", "retries": 1, "retry_delay": timedelta(minutes=5)},
+    tags=["streaming", "sensors"],
+) as dag:
+
+    to_silver = BashOperator(
+    task_id="sensors_bronze_to_silver",
+    bash_command="""
+    set -e
+
+    echo "Starting local Glue Docker job..."
+    echo "Run date: {{ ds }}"
+
+    docker run --rm \
+      -v "$HOST_PROJECT_ROOT:/home/hadoop/workspace" \
+      -e AWS_ACCESS_KEY_ID \
+      -e AWS_SECRET_ACCESS_KEY \
+      -e AWS_DEFAULT_REGION \
+      public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 \
+      spark-submit \
+      /home/hadoop/workspace/glue/scripts/sensors_bronze_to_silver.py \
+      --bucket "$S3_BUCKET" \
+      --run_date "{{ ds }}"
+
+    echo "Local Glue job completed successfully."
+    """,
+    env={
+        "HOST_PROJECT_ROOT": "/home/vaaan/projects/smart-mobility-data-platform",
+        "S3_BUCKET": BUCKET,
+        "AWS_DEFAULT_REGION": REGION,
+    },
+    append_env=True,
+    execution_timeout=timedelta(minutes=20),
+    )
+
+    repair = AthenaOperator(
+        task_id="register_silver_partitions",
+        query="MSCK REPAIR TABLE mobility_silver.sensor_readings",
+        database="mobility_silver",
+        output_location=f"s3://{BUCKET}/athena-results/",
+        region_name=REGION,
+    )
+
+    snapshot = BashOperator(
+        task_id="dbt_snapshot",
+        bash_command="cd $DBT_DIR && $DBT snapshot --profiles-dir .",
+        env=DBT_ENV, append_env=True,
+    )
+
+    dbt_run = BashOperator(
+        task_id="dbt_run_sensor_models",
+        bash_command='cd $DBT_DIR && $DBT run --profiles-dir . '
+                     '--select stg_sensor_readings dim_sensor fact_sensor_hourly '
+                     '--vars "{run_date: \'$RUN_DATE\'}"',
+        env={**DBT_ENV, "RUN_DATE": "{{ ds }}"}, append_env=True,
+    )
+
+    dbt_test = BashOperator(
+        task_id="dbt_test_sensor_models",
+        bash_command="cd $DBT_DIR && $DBT test --profiles-dir . --select dim_sensor fact_sensor_hourly",
+        env=DBT_ENV, append_env=True,
+    )
+
+    to_silver >> repair >> snapshot >> dbt_run >> dbt_test

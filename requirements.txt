@@ -1,0 +1,10 @@
+pyspark==3.5.1
+confluent-kafka
+boto3
+requests
+dbt-core
+dbt-athena
+pyathena[pandas]
+streamlit
+scikit-learn
+ruff
