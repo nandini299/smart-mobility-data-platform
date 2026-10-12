@@ -2,6 +2,8 @@ import pandas as pd
 import streamlit as st
 from athena import run_query
 from llm import generate_sql
+from openai import APIError, OpenAIError
+from pyathena.error import DatabaseError
 from sql_validator import validate_sql
 
 # --------------------------------------------------
@@ -569,14 +571,13 @@ if page == "Overview":
             "Use Refresh data to request updated results."
         )
 
-    except Exception:
+    except (DatabaseError, pd.errors.DatabaseError, ValueError) as exc:
         st.error("Unable to load the sensor overview from Athena.")
 
         with st.expander("Technical details"):
             st.code(str(exc))
 
     st.stop()
-
 # --------------------------------------------------
 # HERO HEADER
 # --------------------------------------------------
@@ -829,7 +830,13 @@ if submitted:
 
                 st.session_state.last_df = df
 
-        except Exception as exc:
+        except (
+           DatabaseError,
+           pd.errors.DatabaseError,
+           APIError,
+           OpenAIError,
+           ValueError,
+           ) as exc:
             st.session_state.last_error = str(exc)
             st.error(
                 "The query could not be completed. "
