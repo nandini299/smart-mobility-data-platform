@@ -48,7 +48,7 @@ jobs:
         run: dbt parse --profiles-dir .
 
   glue-tests:
-    name: Glue 5.0 unit tests
+    name: Glue 4.0 unit tests
     runs-on: ubuntu-latest
 
     steps:
@@ -61,13 +61,15 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/lib/android
 
-      - name: Build Glue test image
-        run: docker build -t smart-mobility/glue:5 glue_image/
+      - name: Pull AWS Glue 4.0 Docker image
+        run: |
+          docker pull public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01
 
       - name: Run Glue unit tests
         run: |
           docker run --rm \
-            -v "$PWD":/home/hadoop/workspace \
+            -v "$GITHUB_WORKSPACE":/home/hadoop/workspace \
             -w /home/hadoop/workspace \
-            smart-mobility/glue:5 \
-            python3 -m pytest -q -p no:cacheprovider tests/glue
+            --entrypoint python3 \
+            public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 \
+            -m pytest -q -p no:cacheprovider tests/glue
