@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import time
 import uuid
@@ -10,7 +11,7 @@ from kafka import KafkaProducer
 # Kafka configuration
 # ============================================================
 
-KAFKA_BOOTSTRAP = "localhost:9092"
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
 TOPIC = "sensor-readings"
 
 # One reading from every sensor every 2 seconds.

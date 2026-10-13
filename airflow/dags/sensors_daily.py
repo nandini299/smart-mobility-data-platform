@@ -14,7 +14,7 @@ DBT_ENV = {"DBT": "/home/airflow/dbt_venv/bin/dbt", "DBT_DIR": "/opt/airflow/dbt
 with DAG(
     dag_id="sensors_daily",
     start_date=datetime(2026, 10, 1, tzinfo=UTC),
-    schedule="*/59 * * * *",
+    schedule="@daily",  # each run processes the previous, complete day ({{ ds }})
     catchup=False,
     max_active_runs=1,
     default_args={"owner": "nandini", "retries": 1, "retry_delay": timedelta(minutes=5)},
@@ -22,33 +22,33 @@ with DAG(
 ) as dag:
 
     to_silver = BashOperator(
-    task_id="sensors_bronze_to_silver",
-    bash_command="""
-    set -e
+        task_id="sensors_bronze_to_silver",
+        bash_command="""
+        set -e
+        : "${HOST_PROJECT_ROOT:?HOST_PROJECT_ROOT must be set in the Airflow environment}"
 
-    echo "Starting local Glue Docker job..."
-    echo "Run date: {{ ds }}"
+        echo "Starting local Glue Docker job..."
+        echo "Run date: {{ ds }}"
 
-    docker run --rm \
-      -v "$HOST_PROJECT_ROOT:/home/hadoop/workspace" \
-      -e AWS_ACCESS_KEY_ID \
-      -e AWS_SECRET_ACCESS_KEY \
-      -e AWS_DEFAULT_REGION \
-      public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 \
-      spark-submit \
-      /home/hadoop/workspace/glue/scripts/sensors_bronze_to_silver.py \
-      --bucket "$S3_BUCKET" \
-      --run_date "{{ ds }}"
+        docker run --rm \
+          -v "$HOST_PROJECT_ROOT:/home/hadoop/workspace" \
+          -e AWS_ACCESS_KEY_ID \
+          -e AWS_SECRET_ACCESS_KEY \
+          -e AWS_DEFAULT_REGION \
+          public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 \
+          spark-submit \
+          /home/hadoop/workspace/glue/scripts/sensors_bronze_to_silver.py \
+          --bucket "$S3_BUCKET" \
+          --run_date "{{ ds }}"
 
-    echo "Local Glue job completed successfully."
-    """,
-    env={
-        "HOST_PROJECT_ROOT": "/home/vaaan/projects/smart-mobility-data-platform",
-        "S3_BUCKET": BUCKET,
-        "AWS_DEFAULT_REGION": REGION,
-    },
-    append_env=True,
-    execution_timeout=timedelta(minutes=20),
+        echo "Local Glue job completed successfully."
+        """,
+        env={
+            "S3_BUCKET": BUCKET,
+            "AWS_DEFAULT_REGION": REGION,
+        },
+        append_env=True,
+        execution_timeout=timedelta(minutes=20),
     )
 
     repair = AthenaOperator(

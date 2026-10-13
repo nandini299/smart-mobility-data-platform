@@ -52,39 +52,27 @@ with DAG(
 
     ingest = PythonOperator(task_id="tlc_to_bronze", python_callable=tlc_to_bronze)
 
- 
+
     to_silver = BashOperator(
-		task_id="trips_bronze_to_silver",
+        task_id="trips_bronze_to_silver",
+        bash_command="""
+        set -e
+        : "${HOST_PROJECT_ROOT:?HOST_PROJECT_ROOT must be set in the Airflow environment}"
 
-		bash_command="""
-		set -e
+        echo "Starting local Glue Docker job..."
+        echo "Year: {{ logical_date.strftime('%Y') }}"
+        echo "Month: {{ logical_date.strftime('%m') }}"
 
-		echo "Starting local Glue Docker job..."
-		echo "Year: {{ logical_date.strftime('%Y') }}"
-		echo "Month: {{ logical_date.strftime('%m') }}"
+        docker run --rm           -v "$HOST_PROJECT_ROOT:/home/hadoop/workspace"           -e AWS_ACCESS_KEY_ID           -e AWS_SECRET_ACCESS_KEY           -e AWS_DEFAULT_REGION           public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01           spark-submit           /home/hadoop/workspace/glue/scripts/trips_bronze_to_silver.py           --bucket "$S3_BUCKET"           --year "{{ logical_date.strftime('%Y') }}"           --month "{{ logical_date.strftime('%m') }}"
 
-		docker run --rm \
-		  -v "$HOST_PROJECT_ROOT:/home/hadoop/workspace" \
-		  -e AWS_ACCESS_KEY_ID \
-		  -e AWS_SECRET_ACCESS_KEY \
-		  -e AWS_DEFAULT_REGION \
-		  public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 \
-		  spark-submit \
-		  /home/hadoop/workspace/glue/scripts/trips_bronze_to_silver.py \
-		  --bucket "$S3_BUCKET" \
-		  --year "{{ logical_date.strftime('%Y') }}" \
-		  --month "{{ logical_date.strftime('%m') }}"
-
-		echo "Local Glue job completed successfully."
-		""",
-
-		env={
-		    "HOST_PROJECT_ROOT": "/home/vaaan/projects/smart-mobility-data-platform",
-		    "S3_BUCKET": BUCKET,
-		    "AWS_DEFAULT_REGION": REGION,
-		},
-
-		append_env=True,
+        echo "Local Glue job completed successfully."
+        """,
+        env={
+            "S3_BUCKET": BUCKET,
+            "AWS_DEFAULT_REGION": REGION,
+        },
+        append_env=True,
+        execution_timeout=timedelta(minutes=60),
     )
 
     repair = AthenaOperator(
@@ -95,9 +83,7 @@ with DAG(
         region_name=REGION,
     )
 
- 
-    
-    
+
     dbt_staging = BashOperator(
         task_id="dbt_staging",
         bash_command="""
@@ -135,7 +121,7 @@ with DAG(
         """,
         append_env=True,
     )
-    
+
     dbt_snapshot = BashOperator(
         task_id="dbt_snapshot",
         bash_command="""
@@ -192,9 +178,3 @@ with DAG(
 
 
     ingest >> to_silver >> repair >> dbt_seed >> dbt_staging >> dbt_snapshot >> dbt_gold >> dbt_test
-    
-    
-    
-    
-    
- 

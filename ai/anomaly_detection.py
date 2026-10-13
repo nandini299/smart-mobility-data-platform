@@ -1,6 +1,6 @@
 """Unsupervised anomaly detection on per-minute sensor aggregates (IsolationForest).
 
-Ground truth (sim_label = 'episode') is used ONLY to evaluate, never to train.
+Ground truth (sim_label = 'anomaly', the simulator's episode label) is used ONLY to evaluate, never to train.
 """
 import os
 
@@ -19,7 +19,7 @@ select sensor_id, sensor_type,
        avg(value)                                              as avg_v,
        max(value)                                              as max_v,
        coalesce(stddev_samp(value), 0)                         as std_v,
-       max(case when sim_label = 'episode' then 1 else 0 end)  as is_episode
+       max(case when sim_label = 'anomaly' then 1 else 0 end)  as is_episode
 from mobility_gold.stg_sensor_readings
 group by 1, 2, 3
 """
