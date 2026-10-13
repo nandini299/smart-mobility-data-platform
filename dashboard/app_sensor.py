@@ -1,10 +1,15 @@
+import os
+
 import streamlit as st
+from dotenv import load_dotenv
 from pyathena import connect
 from pyathena.pandas.cursor import PandasCursor
 
 # ---------------------------------------------------------
 # Page configuration
 # ---------------------------------------------------------
+
+load_dotenv()
 
 st.set_page_config(
     page_title="Smart Mobility - Sensors",
@@ -19,8 +24,8 @@ st.set_page_config(
 @st.cache_resource
 def cursor():
     return connect(
-        s3_staging_dir="s3://nm-2026/athena-results/",
-        region_name="ap-south-1",
+        s3_staging_dir=f"s3://{os.environ['S3_BUCKET']}/athena-results/",
+        region_name=os.getenv("AWS_REGION", "ap-south-1"),
         schema_name="mobility_gold",
         cursor_class=PandasCursor,
     ).cursor()

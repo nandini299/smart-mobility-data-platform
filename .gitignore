@@ -42,6 +42,7 @@ airflow/config/
 dbt_mobility/target/
 dbt_mobility/dbt_packages/
 dbt_mobility/logs/
+dbt_mobility/.user.yml
 
 # Lint and test caches
 .ruff_cache/

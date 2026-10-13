@@ -1,5 +1,6 @@
 """Transform NYC taxi trips from Bronze to Silver using AWS Glue."""
 
+import os
 import sys
 
 from pyspark.sql import DataFrame, SparkSession
@@ -10,8 +11,6 @@ from pyspark.sql.functions import (
     to_date,
     unix_timestamp,
 )
-
-S3_BUCKET = "nm-2026"
 
 FINAL_COLUMNS = [
     "trip_id",
@@ -66,6 +65,22 @@ def rename_and_cast_trips(df: DataFrame) -> DataFrame:
     )
 
 
+def filter_run_month(
+    df: DataFrame,
+    year: str = "2023",
+    month: str = "01",
+) -> DataFrame:
+    """Keep trips whose pickup falls inside the run month.
+
+    TLC monthly files contain a few stray rows from other months/years.
+    """
+
+    return df.filter(
+        col("pickup_ts").isNotNull()
+        & (col("pickup_ts").substr(1, 7) == f"{year}-{month}")
+    )
+
+
 def filter_valid_trips(
     df: DataFrame,
     year: str = "2023",
@@ -73,10 +88,8 @@ def filter_valid_trips(
 ) -> DataFrame:
     """Filter invalid trips and calculate trip duration."""
 
-    df = df.filter(
-        col("pickup_ts").isNotNull()
-        & col("dropoff_ts").isNotNull()
-        & (col("pickup_ts").substr(1, 7) == f"{year}-{month}")
+    df = filter_run_month(df, year, month).filter(
+        col("dropoff_ts").isNotNull()
         & (col("dropoff_ts") > col("pickup_ts"))
         & (col("trip_distance") > 0)
         & (col("trip_distance") < 200)
@@ -132,18 +145,23 @@ def transform_trips(
     return finalize_trips(valid)
 
 
+def get_arg(name: str, default: str | None = None) -> str:
+    """Read a ``--name value`` job argument (Glue passes them this way)."""
+
+    flag = f"--{name}"
+    if flag in sys.argv:
+        return sys.argv[sys.argv.index(flag) + 1]
+    if default is None:
+        raise ValueError(f"Missing required job argument {flag}")
+    return default
+
+
 def main() -> None:
     """Run the AWS Glue Bronze-to-Silver job."""
 
-    args = sys.argv
-    year = "2023"
-    month = "01"
-
-    if "--year" in args:
-        year = args[args.index("--year") + 1]
-
-    if "--month" in args:
-        month = args[args.index("--month") + 1]
+    bucket = get_arg("bucket", os.environ.get("S3_BUCKET"))
+    year = get_arg("year", "2023")
+    month = get_arg("month", "01")
 
     from awsglue.context import GlueContext
 
@@ -162,24 +180,24 @@ def main() -> None:
         GlueContext(spark.sparkContext)
 
         input_path = (
-            f"s3://{S3_BUCKET}/bronze/trips/"
+            f"s3://{bucket}/bronze/trips/"
             f"year={year}/month={month}/"
         )
-        output_path = f"s3://{S3_BUCKET}/silver/trips/"
+        output_path = f"s3://{bucket}/silver/trips/"
 
         print(f"Reading: {input_path}")
         print(f"Writing: {output_path}")
 
-        raw = spark.read.parquet(input_path)
+        # Cached once: the DQ counts below would otherwise re-read S3 each time.
+        renamed = rename_and_cast_trips(spark.read.parquet(input_path)).cache()
 
-        input_rows = raw.count()
-        in_month_rows = input_rows
+        input_rows = renamed.count()
+        in_month_rows = filter_run_month(renamed, year, month).count()
 
-        renamed = rename_and_cast_trips(raw)
         valid = filter_valid_trips(renamed, year, month)
         valid_rows = valid.count()
 
-        df = finalize_trips(valid)
+        df = finalize_trips(valid).cache()
         output_rows = df.count()
 
         print(f"Input rows: {input_rows}")
@@ -214,7 +232,7 @@ def main() -> None:
         )
 
         metrics.coalesce(1).write.mode("overwrite").json(
-            f"s3://{S3_BUCKET}/dq_metrics/trips/"
+            f"s3://{bucket}/dq_metrics/trips/"
             f"run_month={year}-{month}/"
         )
 

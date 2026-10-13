@@ -5,8 +5,8 @@ mobility:
     dev:
       type: athena
       region_name: ap-south-1
-      s3_staging_dir: s3://nm-2026/athena-results/
-      s3_data_dir: s3://nm-2026/gold/
+      s3_staging_dir: "s3://{{ env_var('S3_BUCKET', 'your-bucket-name') }}/athena-results/"
+      s3_data_dir: "s3://{{ env_var('S3_BUCKET', 'your-bucket-name') }}/gold/"
       s3_data_naming: schema_table
       database: awsdatacatalog
       schema: mobility_gold
