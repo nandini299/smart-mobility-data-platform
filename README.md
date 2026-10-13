@@ -162,7 +162,7 @@ Unpause `trips_monthly` to backfill 2023, and `sensors_daily` for sensor data.
 ### 4. Dashboards
 ```bash
 cd dashboard
-streamlit run mobility/app.py        # taxi KPIs
+streamlit run mobility/app.py        # taxi analytics: KPIs, trends, time patterns, zones, payments, data health
 streamlit run app_sensor.py          # sensor analysis + SCD2 history
 streamlit run mobility/ai_app.py     # natural-language → SQL (needs OPENROUTER_API_KEY)
 ```
