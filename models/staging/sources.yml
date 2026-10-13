@@ -1,7 +1,0 @@
-version: 2
-
-sources:
-  - name: mobility_silver
-    schema: mobility_silver
-    tables:
-      - name: sensor_readings
