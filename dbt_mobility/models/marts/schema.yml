@@ -21,6 +21,13 @@ models:
                 to: ref('dim_zone')
                 field: zone_id
 
+      - name: dropoff_zone_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_zone')
+                field: zone_id
+
       - name: payment_type_id
         tests:
           - relationships:
@@ -64,9 +71,24 @@ models:
 
   - name: fact_sensor_hourly
     description: "One row per sensor per hour."
+    tests:
+      # Grain check. Also catches overlapping SCD2 windows in dim_sensor,
+      # which would fan out the point-in-time join.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - sensor_id
+              - reading_hour
     columns:
       - name: sensor_id
         tests: [not_null]
+
+      - name: sensor_key
+        description: "Null means no sensor version was valid at reading_hour."
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: reading_hour
         tests: [not_null]

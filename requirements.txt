@@ -1,10 +1,24 @@
+# Streaming
+kafka-python
 pyspark==3.5.1
-confluent-kafka
+
+# Batch ingest, Athena and dbt
 boto3
 requests
+pandas
+pyathena[pandas]
 dbt-core
 dbt-athena
-pyathena[pandas]
+
+# Dashboards and NL -> SQL
 streamlit
+python-dotenv
+openai
+sqlglot
+
+# Anomaly detection
 scikit-learn
+
+# Dev
+pytest
 ruff

@@ -86,7 +86,7 @@ x-airflow-common:
     - ${HOME}/.aws:/home/airflow/.aws:ro
     - /var/run/docker.sock:/var/run/docker.sock
   group_add:
-    - "136"
+    - "${DOCKER_GID:-136}"  # host docker group id: getent group docker | cut -d: -f3
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
