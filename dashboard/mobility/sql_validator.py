@@ -1,20 +1,18 @@
-import re
+"""Guardrail for LLM-generated SQL before it reaches Athena.
 
-FORBIDDEN_KEYWORDS = [
-    "insert",
-    "update",
-    "delete",
-    "drop",
-    "alter",
-    "create",
-    "truncate",
-    "merge",
-    "grant",
-    "revoke",
-    "call",
-    "execute",
-    "unload",
-]
+The SQL is parsed into an AST (sqlglot, Trino dialect = Athena engine v3)
+instead of being pattern-matched, so table references hidden in comma joins,
+subqueries or CTEs are still checked against the allow-list.
+
+This is defence in depth, not the only control: the Athena credentials used
+by the dashboard should be read-only on mobility_gold, and the workgroup
+should enforce a bytes-scanned limit.
+"""
+
+import sqlglot
+from sqlglot import exp
+
+MAX_SQL_LENGTH = 10000
 
 ALLOWED_TABLES = {
     "mobility_gold.fact_trips",
@@ -25,6 +23,21 @@ ALLOWED_TABLES = {
     "mobility_gold.dim_sensor",
 }
 
+ALLOWED_CATALOGS = {"", "awsdatacatalog"}
+
+READ_ONLY_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
+
+FORBIDDEN_NODES = (
+    exp.Insert,
+    exp.Update,
+    exp.Delete,
+    exp.Merge,
+    exp.Create,
+    exp.Drop,
+    exp.Alter,
+    exp.Command,
+)
+
 
 def validate_sql(sql):
     if not sql or not sql.strip():
@@ -32,61 +45,52 @@ def validate_sql(sql):
 
     sql = sql.strip()
 
-    if len(sql) > 10000:
+    if len(sql) > MAX_SQL_LENGTH:
         return False, "SQL query exceeds the maximum allowed length."
 
     # Reject SQL comments.
     if "--" in sql or "/*" in sql or "*/" in sql:
         return False, "SQL comments are not allowed."
 
-    # Allow one optional trailing semicolon.
-    if sql.endswith(";"):
-        sql = sql[:-1].strip()
+    try:
+        statements = [s for s in sqlglot.parse(sql, read="trino") if s is not None]
+    except sqlglot.errors.ParseError as exc:
+        return False, f"SQL could not be parsed: {exc}"
 
-    # Reject multiple statements.
-    if ";" in sql:
-        return False, "Multiple SQL statements are not allowed."
+    if len(statements) != 1:
+        return False, "Exactly one SQL statement is allowed."
 
-    # Only SELECT statements are allowed.
-    if not re.match(r"^select\b", sql, re.IGNORECASE):
+    statement = statements[0]
+
+    # Only read queries (SELECT, optionally with WITH / UNION) are allowed.
+    if not isinstance(statement, READ_ONLY_ROOTS):
         return False, "Only SELECT queries are allowed."
 
-    # Mask string literals before checking forbidden keywords.
-    # This avoids rejecting words such as 'update' inside a string.
-    sql_without_strings = re.sub(
-        r"'(?:''|[^'])*'",
-        "''",
-        sql,
-    )
+    for node in statement.walk():
+        if isinstance(node, FORBIDDEN_NODES):
+            return False, f"Forbidden SQL operation: {node.key.upper()}"
 
-    sql_lower = sql_without_strings.lower()
+    cte_names = {cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE)}
 
-    # Reject forbidden SQL operations as complete words.
-    for keyword in FORBIDDEN_KEYWORDS:
-        pattern = rf"\b{re.escape(keyword)}\b"
-
-        if re.search(pattern, sql_lower):
-            return False, f"Forbidden SQL operation: {keyword}"
-
-    # Find table references after FROM and JOIN.
-    table_pattern = (
-        r"\b(?:from|join)\s+"
-        r"([a-zA-Z_][a-zA-Z0-9_]*"
-        r"(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?)"
-    )
-
-    tables = re.findall(
-        table_pattern,
-        sql_without_strings,
-        re.IGNORECASE,
-    )
+    tables = list(statement.find_all(exp.Table))
 
     if not tables:
         return False, "No valid table reference found."
 
     # Restrict queries to approved Gold tables.
     for table in tables:
-        if table.lower() not in ALLOWED_TABLES:
-            return False, f"Table is not allowed: {table}"
+        name = table.name.lower()
+
+        # References to a CTE defined in this query are fine.
+        if not table.db and name in cte_names:
+            continue
+
+        full_name = f"{table.db}.{name}".lower()
+
+        if (
+            table.catalog.lower() not in ALLOWED_CATALOGS
+            or full_name not in ALLOWED_TABLES
+        ):
+            return False, f"Table is not allowed: {table.sql(dialect='trino')}"
 
     return True, "SQL validation passed."

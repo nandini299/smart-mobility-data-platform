@@ -6,15 +6,32 @@ from schema import GOLD_SCHEMA, SENSOR_SCHEMA
 
 load_dotenv()
 
-api_key = os.getenv("OPENROUTER_API_KEY")
+MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
 
-if not api_key:
-    raise ValueError("OPENROUTER_API_KEY not found")
+_client = None
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=api_key,
-)
+
+def get_client():
+    """Create the OpenRouter client on first use.
+
+    Raising here (instead of at import time) lets the dashboard start and
+    show a readable error when the API key is missing.
+    """
+
+    global _client
+
+    if _client is None:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found")
+
+        _client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+
+    return _client
 
 
 def detect_schema(question):
@@ -81,8 +98,8 @@ USER QUESTION:
 {question}
 """
 
-    response = client.chat.completions.create(
-        model="openrouter/free",
+    response = get_client().chat.completions.create(
+        model=MODEL,
         messages=[
             {
                 "role": "user",

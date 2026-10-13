@@ -1,6 +1,11 @@
+import os
+
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 from pyathena import connect
+
+load_dotenv()
 
 st.set_page_config(
     page_title="NYC Taxi Analytics",
@@ -10,10 +15,19 @@ st.set_page_config(
 st.title("🚕 NYC Taxi Mobility Dashboard")
 st.write("Data Engineering Portfolio Project")
 
-conn = connect(
-    region_name="ap-south-1",
-    s3_staging_dir="s3://nm-2026/athena-results/"
-)
+@st.cache_resource
+def get_connection():
+    return connect(
+        region_name=os.getenv("AWS_REGION", "ap-south-1"),
+        s3_staging_dir=f"s3://{os.environ['S3_BUCKET']}/athena-results/",
+    )
+
+
+# Every widget change re-runs the script; caching avoids paying for the
+# same Athena scan again when a filter combination repeats.
+@st.cache_data(ttl=3600, show_spinner="Querying Athena...")
+def run_query(sql):
+    return pd.read_sql(sql, get_connection())
 
 
 
@@ -89,7 +103,7 @@ FROM mobility_gold.fact_trips
 {where_clause}
 """
 
-df = pd.read_sql(query, conn)
+df = run_query(query)
 
 row = df.iloc[0]
 
@@ -121,7 +135,7 @@ GROUP BY pickup_month
 ORDER BY pickup_month
 """
 
-monthly_df = pd.read_sql(monthly_query, conn)
+monthly_df = run_query(monthly_query)
 
 st.write("Monthly Trips")
 st.line_chart(
